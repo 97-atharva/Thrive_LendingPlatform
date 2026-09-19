@@ -3,38 +3,68 @@ using LendingPlatform.Api.Infrastructure;
 
 namespace LendingPlatform.Api.Application;
 
-public sealed class LendingService(IDecisionEngine decisionEngine, IApplicationRepository repository)
+public sealed class LendingService
 {
+    private readonly IDecisionEngine _decisionEngine;
+    private readonly IApplicationRepository _repository;
+
+    public LendingService(
+        IDecisionEngine decisionEngine,
+        IApplicationRepository repository)
+    {
+        _decisionEngine = decisionEngine;
+        _repository = repository;
+    }
+
     public LoanDecisionResponse Submit(LoanApplicationRequest request)
     {
-        var ltv = decimal.Round(request.LoanAmount / request.AssetValue * 100m, 2, MidpointRounding.AwayFromZero);
-        var decision = decisionEngine.Evaluate(request.LoanAmount, ltv, request.CreditScore);
-        var record = new ApplicationRecord(Guid.NewGuid(), request.LoanAmount, ltv, decision, DateTimeOffset.UtcNow);
-        repository.Add(record);
-        return new(record.Id, decision.Status, ltv, decision.Reason, record.SubmittedAt);
+        decimal ltv = decimal.Round(
+            request.LoanAmount / request.AssetValue * 100m,
+            2,
+            MidpointRounding.AwayFromZero);
+
+        Decision decision = _decisionEngine.Evaluate(
+            request.LoanAmount,
+            ltv,
+            request.CreditScore);
+
+        var application = new ApplicationRecord(
+            Guid.NewGuid(),
+            request.LoanAmount,
+            ltv,
+            decision,
+            DateTimeOffset.UtcNow);
+
+        _repository.Add(application);
+
+        return new LoanDecisionResponse(
+            application.Id,
+            decision.Status,
+            ltv,
+            decision.Reason,
+            application.SubmittedAt);
     }
 
     public PortfolioResponse GetPortfolio()
     {
-        var applications = repository.GetAll();
-        var successful = applications.Where(application => application.Decision.IsApproved).ToList();
-        return new(
-            applications.Count,
-            successful.Count,
-            applications.Count - successful.Count,
-            successful.Sum(application => application.LoanAmount),
-            applications.Count == 0 ? 0m : decimal.Round(applications.Average(application => application.LoanToValuePercent), 2, MidpointRounding.AwayFromZero));
-    }
-}
+        var applications = _repository.GetAll();
 
-public static class RequestValidator
-{
-    public static Dictionary<string, string[]> Validate(LoanApplicationRequest request)
-    {
-        var errors = new Dictionary<string, string[]>();
-        if (request.LoanAmount <= 0) errors["loanAmount"] = ["Loan amount must be greater than zero."];
-        if (request.AssetValue <= 0) errors["assetValue"] = ["Asset value must be greater than zero."];
-        if (request.CreditScore is < 1 or > 999) errors["creditScore"] = ["Credit score must be between 1 and 999."];
-        return errors;
+        var approvedLoans = applications
+            .Where(a => a.Decision.IsApproved)
+            .ToList();
+
+        decimal meanLtv = applications.Count == 0
+            ? 0m
+            : decimal.Round(
+                applications.Average(a => a.LoanToValuePercent),
+                2,
+                MidpointRounding.AwayFromZero);
+
+        return new PortfolioResponse(
+            applications.Count,
+            approvedLoans.Count,
+            applications.Count - approvedLoans.Count,
+            approvedLoans.Sum(a => a.LoanAmount),
+            meanLtv);
     }
 }

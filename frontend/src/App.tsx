@@ -1,7 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 
-type Decision = { applicationId: string; status: 'Successful' | 'Declined'; loanToValuePercent: number; reason: string; submittedAt: string };
-type Portfolio = { totalApplications: number; successfulApplications: number; declinedApplications: number; totalLoansWritten: number; meanLoanToValuePercent: number };
+import { Decision, Portfolio } from "./types";
 
 const emptyPortfolio: Portfolio = { totalApplications: 0, successfulApplications: 0, declinedApplications: 0, totalLoansWritten: 0, meanLoanToValuePercent: 0 };
 const currency = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
